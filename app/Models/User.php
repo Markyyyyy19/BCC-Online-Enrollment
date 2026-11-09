@@ -36,4 +36,9 @@ class User extends Authenticatable
             'is_active' => 'boolean',
         ];
     }
+
+    public function enrollments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Enrollment::class, 'student_id');
+    }
 }

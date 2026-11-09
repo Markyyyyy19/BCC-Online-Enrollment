@@ -8,6 +8,8 @@
     <link rel="icon" href="{{ asset('images/bcc-logo-web.png') }}">
     <link rel="stylesheet" href="{{ asset('css/tokens.css') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/toasts.css') }}">
+    <script src="{{ asset('js/toasts.js') }}" defer></script>
 </head>
 <body class="auth-body">
     <main class="auth-page">
@@ -16,16 +18,7 @@
                 <img src="{{ asset('images/bcc-logo-web.png') }}" alt="" width="48" height="48">
                 <strong>Buenavista Community College</strong>
             </a>
-            @if (session('success'))
-                <div class="notice notice-success" role="status">{{ session('success') }}</div>
-            @endif
-            @if (session('status'))
-                <div class="notice notice-success" role="status">{{ session('status') }}</div>
-            @endif
-            @if ($errors->any())
-                <div class="notice notice-error" role="alert">{{ $errors->first() }}</div>
-            @endif
-            @yield('form')
+@yield('form')
         </section>
     </main>
     <script>
@@ -70,5 +63,6 @@
             passwordInput.addEventListener('blur', updatePasswordTooltip);
         })();
     </script>
+    <x-toast-notifications />
 </body>
 </html>

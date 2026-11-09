@@ -60,10 +60,9 @@ class GradeController extends Controller
     public function update(Request $request, Enrollment $enrollment, Subject $subject): GradeResource
     {
         $validated = $request->validate([
-            'preliminary' => ['nullable', 'numeric', 'between:1,5'],
             'midterm' => ['nullable', 'numeric', 'between:1,5'],
             'final_term' => ['nullable', 'numeric', 'between:1,5'],
-            'remarks' => ['sometimes', 'in:In progress,Incomplete'],
+            'remarks' => ['sometimes', 'in:In progress,Passed,Failed,Incomplete'],
         ]);
 
         $isEligible = DB::table('enrollment_subjects')
@@ -79,25 +78,29 @@ class GradeController extends Controller
             ->where('enrollment_id', $enrollment->id)
             ->where('subject_id', $subject->id)
             ->first();
-        $preliminary = array_key_exists('preliminary', $validated) ? $validated['preliminary'] : $existingGrade?->preliminary;
+
         $midterm = array_key_exists('midterm', $validated) ? $validated['midterm'] : $existingGrade?->midterm;
         $finalTerm = array_key_exists('final_term', $validated) ? $validated['final_term'] : $existingGrade?->final_term;
-        $components = [
-            $preliminary,
-            $midterm,
-            $finalTerm,
-        ];
-        $complete = ! in_array(null, $components, true);
-        $finalGrade = $complete ? round(array_sum($components) / 3, 2) : null;
-        $isIncomplete = ($validated['remarks'] ?? $existingGrade?->remarks) === 'Incomplete';
-        $remarks = $isIncomplete
-            ? 'Incomplete'
-            : ($finalGrade === null ? 'In progress' : ($finalGrade <= 3 ? 'Passed' : 'Failed'));
+
+        $midterm = $midterm !== null && $midterm !== '' ? (float) $midterm : null;
+        $finalTerm = $finalTerm !== null && $finalTerm !== '' ? (float) $finalTerm : null;
+
+        $complete = ($midterm !== null && $finalTerm !== null);
+        $finalGrade = $complete ? round(($midterm + $finalTerm) / 2, 2) : null;
+
+        $chosenRemark = $validated['remarks'] ?? $existingGrade?->remarks;
+        if ($chosenRemark === 'Incomplete') {
+            $remarks = 'Incomplete';
+        } elseif ($finalGrade !== null) {
+            $remarks = $finalGrade <= 3.0 ? 'Passed' : 'Failed';
+        } else {
+            $remarks = 'In progress';
+        }
 
         DB::table('grades')->updateOrInsert(
             ['enrollment_id' => $enrollment->id, 'subject_id' => $subject->id],
             [
-                'preliminary' => $preliminary,
+                'preliminary' => null,
                 'midterm' => $midterm,
                 'final_term' => $finalTerm,
                 'final_grade' => $finalGrade,

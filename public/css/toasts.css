@@ -1,0 +1,10 @@
+.toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 9999; display: grid; gap: 10px; width: min(390px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; pointer-events: none; }
+.app-toast { display: flex; align-items: flex-start; gap: 14px; padding: 16px; border: 1px solid #cfe1d5; border-left: 4px solid #258551; border-radius: 10px; background: #fff; color: #213b2b; box-shadow: 0 8px 28px #14271c26; font-size: 14px; line-height: 1.5; pointer-events: auto; overflow-wrap: anywhere; }
+.app-toast > :first-child { flex: 1; min-width: 0; }
+.app-toast p { margin: 0; }
+.app-toast p + p { margin-top: 8px; }
+.app-toast-error { border-color: #ebcccc; border-left-color: #b33c3c; color: #7b2626; }
+.app-toast button { flex: none; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 24px; line-height: 1; min-width: 32px; min-height: 32px; border-radius: 6px; }
+.app-toast button:hover { background: #14271c0a; }
+.app-toast button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (max-width: 600px) { .toast-stack { right: 16px; bottom: 12px; } }

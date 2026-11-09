@@ -48,6 +48,4 @@ Route::prefix('registrar')->name('registrar.')->middleware(['auth', 'role:regist
     Route::patch('/subjects/{subject}/toggle', [RegistrarController::class, 'toggleSubject'])->name('subjects.toggle');
     Route::get('/grades', [RegistrarController::class, 'grades'])->name('grades');
     Route::patch('/grades/{enrollment}/{subject}', [RegistrarController::class, 'updateGrade'])->name('grades.update');
-    Route::get('/reports', [RegistrarController::class, 'reports'])->name('reports');
-    Route::get('/reports/export', [RegistrarController::class, 'report'])->name('reports.export');
 });

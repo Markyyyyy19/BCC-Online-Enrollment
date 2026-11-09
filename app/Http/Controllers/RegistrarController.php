@@ -11,7 +11,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RegistrarController extends Controller
 {
@@ -27,9 +26,26 @@ class RegistrarController extends Controller
             $selectedStatus = 'all';
         }
 
+        $search = trim((string) $request->query('search', ''));
+        if ($search !== '') {
+            $query->whereHas('student', function ($studentQuery) use ($search): void {
+                $studentQuery->where(function ($studentQuery) use ($search): void {
+                    $studentQuery->where('student_number', 'like', "%{$search}%")
+                        ->orWhere('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+
+                    if (ctype_digit($search)) {
+                        $studentQuery->orWhere('id', (int) $search);
+                    }
+                });
+            });
+        }
+
         return view('registrar.applications', [
-            'enrollments' => $query->paginate(12)->withQueryString(),
+            'enrollments' => $query->paginate($this->tablePageSize($request))->withQueryString(),
             'selectedStatus' => $selectedStatus,
+            'search' => $search,
             'pendingCount' => Enrollment::query()->whereIn('status', ['submitted', 'under_review'])->count(),
         ]);
     }
@@ -49,10 +65,15 @@ class RegistrarController extends Controller
         return back()->with('success', 'Application status updated.');
     }
 
-    public function students(): View
+    public function students(Request $request): View
     {
+        $studentNumber = trim((string) $request->query('student_number', ''));
+
         $students = User::query()
             ->where('role', 'student')
+            ->when($studentNumber !== '', function ($query) use ($studentNumber): void {
+                $query->where('student_number', 'like', "%{$studentNumber}%");
+            })
             ->addSelect([
                 'latest_program_code' => DB::table('enrollments')
                     ->join('programs', 'enrollments.program_id', '=', 'programs.id')
@@ -68,10 +89,11 @@ class RegistrarController extends Controller
             ])
             ->orderBy('last_name')
             ->orderBy('first_name')
-            ->paginate(20);
+            ->paginate($this->tablePageSize($request))->withQueryString();
 
         return view('registrar.students', [
             'students' => $students,
+            'studentNumber' => $studentNumber,
         ]);
     }
 
@@ -99,10 +121,10 @@ class RegistrarController extends Controller
         return back()->with('success', $student->is_active ? 'Student access restored.' : 'Student access deactivated.');
     }
 
-    public function programs(): View
+    public function programs(Request $request): View
     {
         return view('registrar.programs', [
-            'programs' => Program::query()->withCount('subjects')->orderBy('code')->paginate(20),
+            'programs' => Program::query()->withCount('subjects')->orderBy('code')->paginate($this->tablePageSize($request))->withQueryString(),
         ]);
     }
 
@@ -141,11 +163,31 @@ class RegistrarController extends Controller
         return back()->with('success', $program->is_active ? 'Program is now open for applications.' : 'Program is now archived.');
     }
 
-    public function subjects(): View
+    public function subjects(Request $request): View
     {
+        $programId = $request->integer('program_id') ?: null;
+        $yearLevel = $request->integer('year_level') ?: null;
+        $semester = $request->input('semester');
+        if (! in_array($semester, ['1st', '2nd', 'Summer'], true)) {
+            $semester = null;
+        }
+
+        $query = Subject::query()
+            ->with('program')
+            ->when($programId, fn ($q) => $q->where('program_id', $programId))
+            ->when($yearLevel, fn ($q) => $q->where('year_level', $yearLevel))
+            ->when($semester, fn ($q) => $q->where('semester', $semester))
+            ->orderBy('program_id')
+            ->orderBy('year_level')
+            ->orderBy('semester')
+            ->orderBy('code');
+
         return view('registrar.subjects', [
-            'subjects' => Subject::query()->with('program')->orderBy('program_id')->orderBy('year_level')->orderBy('code')->paginate(30),
+            'subjects' => $query->paginate($this->tablePageSize($request))->withQueryString(),
             'programs' => Program::query()->where('is_active', true)->orderBy('code')->get(),
+            'selectedProgramId' => $programId,
+            'selectedYearLevel' => $yearLevel,
+            'selectedSemester' => $semester,
             'majors' => DB::table('program_majors')
                 ->join('programs', 'program_majors.program_id', '=', 'programs.id')
                 ->where('program_majors.is_active', true)
@@ -218,36 +260,141 @@ class RegistrarController extends Controller
     public function grades(Request $request): View
     {
         $studentId = $request->integer('student_id') ?: null;
-        $gradeQuery = DB::table('enrollments')
-            ->join('enrollment_subjects', 'enrollments.id', '=', 'enrollment_subjects.enrollment_id')
-            ->join('users', 'enrollments.student_id', '=', 'users.id')
-            ->join('programs', 'enrollments.program_id', '=', 'programs.id')
-            ->join('subjects', 'enrollment_subjects.subject_id', '=', 'subjects.id')
-            ->leftJoin('grades', function ($join): void {
-                $join->on('grades.enrollment_id', '=', 'enrollment_subjects.enrollment_id')
-                    ->on('grades.subject_id', '=', 'enrollment_subjects.subject_id');
-            })
-            ->where('enrollments.status', 'approved')
-            ->when($studentId, fn ($query) => $query->where('enrollments.student_id', $studentId))
-            ->select('enrollments.id as enrollment_id', 'enrollments.school_year', 'enrollments.semester', 'users.student_number', 'users.first_name', 'users.last_name', 'programs.code as program_code', 'subjects.id as subject_id', 'subjects.code', 'subjects.title', 'grades.preliminary', 'grades.midterm', 'grades.final_term', 'grades.final_grade', 'grades.remarks')
-            ->orderBy('users.last_name')
-            ->orderBy('subjects.code');
-        $grades = $gradeQuery->paginate(30)->withQueryString();
+        $search = trim((string) $request->input('search', ''));
+        $programId = $request->integer('program_id') ?: null;
+
+        // All students with approved enrollments for quick switching dropdown
+        $eligibleStudents = User::query()
+            ->where('role', 'student')
+            ->whereHas('enrollments', fn ($q) => $q->where('status', 'approved'))
+            ->with(['enrollments' => fn ($q) => $q->where('status', 'approved')->with('program')])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+
+        $selectedStudent = null;
+        $studentEnrollments = collect();
+        $gradesBySubject = collect();
+        $totalSubjectsCount = 0;
+        $gradedSubjectsCount = 0;
+        $pendingSubjectsCount = 0;
+
+        if ($studentId) {
+            $selectedStudent = User::query()
+                ->where('role', 'student')
+                ->where('id', $studentId)
+                ->whereHas('enrollments', fn ($q) => $q->where('status', 'approved'))
+                ->first();
+
+            if ($selectedStudent) {
+                $studentEnrollments = Enrollment::query()
+                    ->where('student_id', $selectedStudent->id)
+                    ->where('status', 'approved')
+                    ->with(['program', 'major', 'subjects'])
+                    ->orderByDesc('school_year')
+                    ->orderByDesc('semester')
+                    ->get();
+
+                $enrollmentIds = $studentEnrollments->pluck('id');
+                $gradesBySubject = DB::table('grades')
+                    ->whereIn('enrollment_id', $enrollmentIds)
+                    ->get()
+                    ->keyBy(fn ($item) => "{$item->enrollment_id}-{$item->subject_id}");
+
+                $totalSubjectsCount = $studentEnrollments->sum(fn ($e) => $e->subjects->count());
+                $gradedSubjectsCount = DB::table('grades')
+                    ->whereIn('enrollment_id', $enrollmentIds)
+                    ->whereNotNull('final_grade')
+                    ->count();
+                $pendingSubjectsCount = max(0, $totalSubjectsCount - $gradedSubjectsCount);
+
+                $allGradeRows = $studentEnrollments->flatMap(function ($enrollment) {
+                    return $enrollment->subjects->map(fn ($subject) => [
+                        'enrollment' => $enrollment,
+                        'subject' => $subject,
+                    ]);
+                })->values();
+                $gradeRows = new \Illuminate\Pagination\LengthAwarePaginator(
+                    $allGradeRows->forPage($request->integer('page', 1), $this->tablePageSize($request))->values(),
+                    $allGradeRows->count(),
+                    $this->tablePageSize($request),
+                    $request->integer('page', 1),
+                    ['path' => route('registrar.grades'), 'query' => $request->query()]
+                );
+            }
+        }
+
+        // When no student is selected, prepare the student directory list with progress metrics
+        $studentsList = null;
+        if (! $selectedStudent) {
+            $studentsQuery = User::query()
+                ->where('role', 'student')
+                ->whereHas('enrollments', function ($q) use ($programId) {
+                    $q->where('status', 'approved')
+                        ->when($programId, fn ($sub) => $sub->where('program_id', $programId));
+                })
+                ->when($search, function ($query, $search) {
+                    $query->where(function ($q) use ($search) {
+                        $q->where('first_name', 'ilike', "%{$search}%")
+                            ->orWhere('last_name', 'ilike', "%{$search}%")
+                            ->orWhere('student_number', 'ilike', "%{$search}%");
+                    });
+                })
+                ->with(['enrollments' => function ($q) {
+                    $q->where('status', 'approved')
+                        ->with(['program', 'subjects'])
+                        ->orderByDesc('school_year')
+                        ->orderByDesc('semester');
+                }])
+                ->orderBy('last_name')
+                ->orderBy('first_name');
+
+            $studentsList = $studentsQuery->paginate($this->tablePageSize($request))->withQueryString();
+
+            $pageEnrollmentIds = $studentsList->getCollection()->flatMap(fn ($s) => $s->enrollments->pluck('id'))->unique();
+            $gradedCountsByEnrollment = DB::table('grades')
+                ->whereIn('enrollment_id', $pageEnrollmentIds)
+                ->whereNotNull('final_grade')
+                ->select('enrollment_id', DB::raw('count(*) as count'))
+                ->groupBy('enrollment_id')
+                ->pluck('count', 'enrollment_id');
+
+            $studentsList->getCollection()->transform(function ($student) use ($gradedCountsByEnrollment) {
+                $totalSubj = $student->enrollments->sum(fn ($e) => $e->subjects->count());
+                $gradedSubj = $student->enrollments->sum(fn ($e) => $gradedCountsByEnrollment->get($e->id, 0));
+                $student->total_subjects = $totalSubj;
+                $student->graded_subjects = $gradedSubj;
+                $student->pending_subjects = max(0, $totalSubj - $gradedSubj);
+
+                return $student;
+            });
+        }
+
+        $programs = Program::query()->where('is_active', true)->orderBy('code')->get();
 
         return view('registrar.grades', [
-            'grades' => $grades,
-            'students' => User::query()->where('role', 'student')->orderBy('last_name')->get(),
-            'selectedStudentId' => $studentId,
+            'selectedStudent' => $selectedStudent,
+            'selectedStudentId' => $selectedStudent?->id,
+            'studentEnrollments' => $studentEnrollments,
+            'gradesBySubject' => $gradesBySubject,
+            'totalSubjectsCount' => $totalSubjectsCount,
+            'gradedSubjectsCount' => $gradedSubjectsCount,
+            'pendingSubjectsCount' => $pendingSubjectsCount,
+            'gradeRows' => $gradeRows ?? collect(),
+            'students' => $studentsList,
+            'eligibleStudents' => $eligibleStudents,
+            'programs' => $programs,
+            'search' => $search,
+            'selectedProgramId' => $programId,
         ]);
     }
 
     public function updateGrade(Request $request, Enrollment $enrollment, Subject $subject): RedirectResponse
     {
         $validated = $request->validate([
-            'preliminary' => ['nullable', 'numeric', 'between:1,5'],
             'midterm' => ['nullable', 'numeric', 'between:1,5'],
             'final_term' => ['nullable', 'numeric', 'between:1,5'],
-            'remarks' => ['required', 'in:In progress,Incomplete'],
+            'remarks' => ['nullable', 'string', 'in:In progress,Passed,Failed,Incomplete'],
         ]);
 
         $isEligible = DB::table('enrollment_subjects')
@@ -259,19 +406,27 @@ class RegistrarController extends Controller
 
         abort_unless($isEligible, 404);
 
-        $components = [$validated['preliminary'] ?? null, $validated['midterm'] ?? null, $validated['final_term'] ?? null];
-        $complete = ! in_array(null, $components, true);
-        $finalGrade = $complete ? round(array_sum($components) / 3, 2) : null;
-        $remarks = $validated['remarks'] === 'Incomplete'
-            ? 'Incomplete'
-            : ($finalGrade === null ? 'In progress' : ($finalGrade <= 3 ? 'Passed' : 'Failed'));
+        $midterm = isset($validated['midterm']) && $validated['midterm'] !== '' ? (float) $validated['midterm'] : null;
+        $finalTerm = isset($validated['final_term']) && $validated['final_term'] !== '' ? (float) $validated['final_term'] : null;
+
+        $complete = ($midterm !== null && $finalTerm !== null);
+        $finalGrade = $complete ? round(($midterm + $finalTerm) / 2, 2) : null;
+
+        $chosenRemark = $validated['remarks'] ?? null;
+        if ($chosenRemark === 'Incomplete') {
+            $remarks = 'Incomplete';
+        } elseif ($finalGrade !== null) {
+            $remarks = $finalGrade <= 3.0 ? 'Passed' : 'Failed';
+        } else {
+            $remarks = 'In progress';
+        }
 
         DB::table('grades')->updateOrInsert(
             ['enrollment_id' => $enrollment->id, 'subject_id' => $subject->id],
             [
-                'preliminary' => $validated['preliminary'] ?? null,
-                'midterm' => $validated['midterm'] ?? null,
-                'final_term' => $validated['final_term'] ?? null,
+                'preliminary' => null,
+                'midterm' => $midterm,
+                'final_term' => $finalTerm,
                 'final_grade' => $finalGrade,
                 'remarks' => $remarks,
                 'encoded_by' => auth()->id(),
@@ -279,43 +434,12 @@ class RegistrarController extends Controller
             ],
         );
 
-        return back()->with('success', 'Grade record updated.');
+        return redirect()->route('registrar.grades', ['student_id' => $enrollment->student_id])
+            ->with('success', "Grade saved for {$subject->code}.");
     }
 
-    public function reports(): View
+    private function tablePageSize(Request $request): int
     {
-        $counts = Enrollment::query()
-            ->selectRaw("COUNT(*) AS applications, COUNT(*) FILTER (WHERE status = 'submitted') AS submitted, COUNT(*) FILTER (WHERE status = 'under_review') AS under_review, COUNT(*) FILTER (WHERE status = 'approved') AS approved, COUNT(*) FILTER (WHERE status = 'rejected') AS rejected")
-            ->first();
-        $byProgram = DB::table('enrollments')
-            ->join('programs', 'enrollments.program_id', '=', 'programs.id')
-            ->select('programs.code', 'programs.name', DB::raw('COUNT(enrollments.id) AS total'))
-            ->groupBy('programs.id', 'programs.code', 'programs.name')
-            ->orderBy('programs.code')
-            ->get();
-
-        return view('registrar.reports', compact('counts', 'byProgram'));
-    }
-
-    public function report(): StreamedResponse
-    {
-        $rows = DB::table('enrollments')
-            ->join('users', 'enrollments.student_id', '=', 'users.id')
-            ->join('programs', 'enrollments.program_id', '=', 'programs.id')
-            ->select('users.student_number', 'users.first_name', 'users.last_name', 'users.email', 'programs.code as program', 'enrollments.school_year', 'enrollments.semester', 'enrollments.year_level', 'enrollments.student_type', 'enrollments.status')
-            ->orderBy('enrollments.school_year')
-            ->orderBy('users.last_name')
-            ->get();
-
-        return response()->streamDownload(function () use ($rows): void {
-            $output = fopen('php://output', 'w');
-            fputcsv($output, ['Student number', 'First name', 'Last name', 'Email', 'Program', 'School year', 'Semester', 'Year level', 'Student type', 'Status']);
-
-            foreach ($rows as $row) {
-                fputcsv($output, (array) $row);
-            }
-
-            fclose($output);
-        }, 'bcc-enrollment-report.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+        return 20;
     }
 }

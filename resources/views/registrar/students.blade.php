@@ -4,58 +4,123 @@
 @section('eyebrow', 'Registrar / Students')
 
 @section('content')
-    <section class="page-heading-row">
-        <div>
-            <p class="section-kicker">Campus community</p>
-            <h1 class="page-title">Student directory<span class="title-period">.</span></h1>
-            <p class="page-lede">Maintain student profiles and account access.</p>
-        </div>
-    </section>
     <section class="panel list-panel">
+        <div class="filter-row applications-filter-row">
+            <form class="applications-search" method="get" action="{{ route('registrar.students') }}">
+                <input type="hidden" name="per_page" value="{{ request('per_page', 20) }}">
+                <div class="applications-search-field">
+                    <label class="field-label" for="student-number-search">Student number</label>
+                    <input class="form-control form-control-small" type="search" id="student-number-search" name="student_number" value="{{ $studentNumber }}" placeholder="Search by student number" autocomplete="off">
+                </div>
+                <button class="button button-quiet button-small" type="submit">Search</button>
+                @if ($studentNumber !== '')
+                    <a class="button button-quiet button-small" href="{{ route('registrar.students', ['per_page' => request('per_page', 20)]) }}">Clear</a>
+                @endif
+            </form>
+        </div>
         <div class="table-wrap">
             <table class="responsive-table student-directory-table">
-                <thead><tr><th>Student</th><th>Student number</th><th>Latest program</th><th>Email</th><th>Account</th><th>Joined</th><th></th></tr></thead>
+                <thead>
+                    <tr>
+                        <th scope="col">Student</th>
+                        <th scope="col">Student number</th>
+                        <th scope="col">Latest program</th>
+                        <th scope="col">Email</th>
+                        <th scope="col">Account</th>
+                        <th scope="col">Joined</th>
+                    </tr>
+                </thead>
                 <tbody>
                     @forelse ($students as $student)
-                        <tr>
-                            <td><strong>{{ $student->first_name }} {{ $student->last_name }}</strong></td>
-                            <td>{{ $student->student_number ?? '—' }}</td>
-                            <td>{{ $student->latest_program_code ?? '—' }}@if ($student->latest_enrollment_status)<small><span class="status-badge status-{{ $student->latest_enrollment_status }}">{{ str_replace('_', ' ', $student->latest_enrollment_status) }}</span></small>@endif</td>
-                            <td>{{ $student->email }}</td>
-                            <td><span class="status-badge {{ $student->is_active ? 'status-approved' : 'status-rejected' }}">{{ $student->is_active ? 'Active' : 'Inactive' }}</span></td>
-                            <td>{{ $student->created_at?->format('M j, Y') }}</td>
-                            <td>
-                                <details class="review-details">
-                                    <summary>Manage</summary>
-                                    <div class="student-actions">
-                                        <form class="student-edit-form" method="post" action="{{ route('registrar.students.update', $student) }}">
-                                            @csrf
-                                            @method('PATCH')
-                                            <label class="field-label" for="student-number-{{ $student->id }}">Student number</label>
-                                            <input class="form-control form-control-small" id="student-number-{{ $student->id }}" name="student_number" value="{{ $student->student_number }}" maxlength="30">
-                                            <label class="field-label" for="first-name-{{ $student->id }}">First name</label>
-                                            <input class="form-control form-control-small" id="first-name-{{ $student->id }}" name="first_name" value="{{ $student->first_name }}" required>
-                                            <label class="field-label" for="last-name-{{ $student->id }}">Last name</label>
-                                            <input class="form-control form-control-small" id="last-name-{{ $student->id }}" name="last_name" value="{{ $student->last_name }}" required>
-                                            <label class="field-label" for="email-{{ $student->id }}">Email</label>
-                                            <input class="form-control form-control-small" id="email-{{ $student->id }}" name="email" type="email" value="{{ $student->email }}" required>
-                                            <button class="button button-primary button-small" type="submit">Save profile</button>
-                                        </form>
-                                        <form method="post" action="{{ route('registrar.students.access', $student) }}">
-                                            @csrf
-                                            @method('PATCH')
-                                            <button class="button button-quiet button-small" type="submit">{{ $student->is_active ? 'Deactivate account' : 'Restore access' }}</button>
-                                        </form>
-                                    </div>
-                                </details>
+                        <tr class="clickable-student-profile-row"
+                            tabindex="0"
+                            role="button"
+                            aria-label="Manage profile for {{ $student->first_name }} {{ $student->last_name }}"
+                            data-action="{{ route('registrar.students.update', $student) }}"
+                            data-access-action="{{ route('registrar.students.access', $student) }}"
+                            data-student-number="{{ $student->student_number ?? '' }}"
+                            data-first-name="{{ $student->first_name }}"
+                            data-last-name="{{ $student->last_name }}"
+                            data-email="{{ $student->email }}"
+                            data-program="{{ $student->latest_program_code ?? '' }}"
+                            data-is-active="{{ $student->is_active ? '1' : '0' }}"
+                            data-joined="{{ $student->created_at?->format('M j, Y') ?? '' }}">
+                            <td data-label="Student"><strong>{{ $student->first_name }} {{ $student->last_name }}</strong></td>
+                            <td data-label="Student number">{{ $student->student_number ?? '' }}</td>
+                            <td data-label="Latest program">{{ $student->latest_program_code ?? '' }}</td>
+                            <td data-label="Email">{{ $student->email }}</td>
+                            <td data-label="Account">
+                                <span class="status-badge {{ $student->is_active ? 'status-approved' : 'status-rejected' }}">
+                                    {{ $student->is_active ? 'Active' : 'Inactive' }}
+                                </span>
                             </td>
+                            <td data-label="Joined">{{ $student->created_at?->format('M j, Y') }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="empty-cell">No students have registered yet.</td></tr>
+                        <tr><td colspan="6" class="empty-cell">{{ $studentNumber !== '' ? 'No students match this student number.' : 'No students have registered yet.' }}</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
         <div class="pagination-row">{{ $students->links() }}</div>
     </section>
+
+    {{-- Student Profile Edit & Access Modal Dialog --}}
+    <dialog id="student-edit-modal" class="portal-modal" aria-labelledby="student-modal-title">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-header-copy">
+                    <span class="modal-kicker">Student Profile</span>
+                    <h2 class="modal-title" id="student-modal-title">Student Name</h2>
+                    <p class="modal-subtitle" id="student-modal-subtitle">Student number · Program</p>
+                </div>
+                <button type="button" class="modal-close-btn" id="student-modal-close" aria-label="Close dialog">
+                    <x-portal-icon name="close" />
+                </button>
+            </div>
+
+            <form id="student-edit-form" method="post" action="">
+                @csrf
+                @method('PATCH')
+                <div class="modal-body">
+                    <div class="student-modal-grid">
+                        <div class="field-item">
+                            <label class="field-label" for="student-modal-number">Student number</label>
+                            <input class="form-control" id="student-modal-number" name="student_number" maxlength="30" placeholder="e.g. 2026-0001">
+                        </div>
+
+                        <div class="field-item">
+                            <label class="field-label" for="student-modal-email">Email address</label>
+                            <input class="form-control" id="student-modal-email" name="email" type="email" required>
+                        </div>
+
+                        <div class="field-item">
+                            <label class="field-label" for="student-modal-first-name">First name</label>
+                            <input class="form-control" id="student-modal-first-name" name="first_name" required>
+                        </div>
+
+                        <div class="field-item">
+                            <label class="field-label" for="student-modal-last-name">Last name</label>
+                            <input class="form-control" id="student-modal-last-name" name="last_name" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer" style="justify-content: space-between;">
+                    <div>
+                        <button type="button" class="button button-quiet button-small" id="student-access-btn">Deactivate account</button>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="button button-quiet button-small" id="student-modal-cancel">Cancel</button>
+                        <button type="submit" class="button button-primary button-small">Save profile</button>
+                    </div>
+                </div>
+            </form>
+
+            <form id="student-access-form" method="post" action="" style="display: none;">
+                @csrf
+                @method('PATCH')
+            </form>
+        </div>
+    </dialog>
 @endsection

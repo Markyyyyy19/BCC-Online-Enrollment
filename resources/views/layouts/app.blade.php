@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('css/portal.css') }}">
     <script src="{{ asset('js/portal.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ asset('css/toasts.css') }}">
+    <script src="{{ asset('js/toasts.js') }}" defer></script>
 </head>
 <body class="workspace-body portal">
     @php
@@ -20,7 +22,6 @@
             ['Programs', 'registrar.programs', 'registrar.programs*', 'programs'],
             ['Subjects', 'registrar.subjects', 'registrar.subjects', 'subjects'],
             ['Grades', 'registrar.grades', 'registrar.grades', 'grades'],
-            ['Reports', 'registrar.reports', 'registrar.reports*', 'reports'],
         ] : [
             ['My applications', 'student.enrollments.index', 'student.enrollments.index', 'applications'],
             ['New enrollment', 'student.enrollments.create', 'student.enrollments.create', 'plus'],
@@ -68,15 +69,10 @@
                 </details>
             </header>
             <main class="page-wrap" id="main-content" tabindex="-1">
-                @if (session('success'))
-                    <div class="notice notice-success" role="status">{{ session('success') }}</div>
-                @endif
-                @if ($errors->any())
-                    <div class="notice notice-error" role="alert">{{ $errors->first() }}</div>
-                @endif
-                @yield('content')
+@yield('content')
             </main>
         </div>
     </div>
+    <x-toast-notifications />
 </body>
 </html>

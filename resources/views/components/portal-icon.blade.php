@@ -9,7 +9,6 @@
         @case('programs') <path d="m2 9 10-5 10 5-10 5L2 9Zm4 2v6l6 3 6-3v-6M22 9v7"/> @break
         @case('subjects') <path d="M12 5v15M3 4h5a4 4 0 0 1 4 2 4 4 0 0 1 4-2h5v15h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3Z"/> @break
         @case('grades') <path d="M5 3h14v18H5ZM8 8h8M8 12h3m2 4 2 2 4-4"/> @break
-        @case('reports') <path d="M4 3v18h17M8 16v-4m5 4V7m5 9v-6"/> @break
         @case('arrow') <path d="M5 12h14m-5-5 5 5-5 5"/> @break
         @case('menu') <path d="M4 6h16M4 12h16M4 18h16"/> @break
         @case('close') <path d="m6 6 12 12M6 18 18 6"/> @break

@@ -15,8 +15,6 @@ INSERT INTO programs (id, source_id, code, name, department, duration_years, is_
   (3, 1, 'BEED', 'Bachelor of Elementary Education', 'Buenavista Community College', 4, TRUE),
   (6, 2, 'BSED', 'Bachelor of Secondary Education', 'Buenavista Community College', 4, TRUE),
   (7, 3, 'BSCRIM', 'Bachelor of Science in Criminology', 'Buenavista Community College', 4, TRUE),
-  (10, 6, 'BTLE', 'Bachelor of Technology and Livelihood Education', 'Buenavista Community College', 4, TRUE),
-  (11, 8, 'BSHRM', 'Bachelor of Science in Hotel and Restaurant Management', 'Buenavista Community College', 4, TRUE),
   (12, 9, 'BSTM', 'Bachelor of Science in Tourism Management', 'Buenavista Community College', 4, TRUE)
 ON CONFLICT (id) DO UPDATE SET
   source_id = EXCLUDED.source_id,

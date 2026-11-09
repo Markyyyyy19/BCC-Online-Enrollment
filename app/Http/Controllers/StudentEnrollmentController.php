@@ -14,13 +14,13 @@ use Illuminate\View\View;
 
 class StudentEnrollmentController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
         $enrollments = Enrollment::query()
             ->where('student_id', Auth::id())
             ->with(['program', 'major', 'subjects'])
             ->latest('submitted_at')
-            ->paginate(8);
+            ->paginate($this->tablePageSize($request))->withQueryString();
 
         return view('student.enrollments.index', compact('enrollments'));
     }
@@ -162,7 +162,7 @@ class StudentEnrollmentController extends Controller
         return back()->with('success', 'Your application has been withdrawn.');
     }
 
-    public function grades(): View
+    public function grades(Request $request): View
     {
         $grades = DB::table('grades')
             ->join('enrollments', 'grades.enrollment_id', '=', 'enrollments.id')
@@ -172,12 +172,13 @@ class StudentEnrollmentController extends Controller
             ->select('grades.*', 'subjects.code', 'subjects.title', 'subjects.units', 'enrollments.school_year', 'enrollments.semester', 'programs.code as program_code')
             ->orderByDesc('enrollments.school_year')
             ->orderBy('subjects.code')
-            ->get();
+            ->paginate($this->tablePageSize($request))
+            ->withQueryString();
 
         return view('student.grades', compact('grades'));
     }
 
-    public function subjects(): View
+    public function subjects(Request $request): View
     {
         $subjects = Subject::query()
             ->with('program')
@@ -185,8 +186,13 @@ class StudentEnrollmentController extends Controller
             ->orderBy('program_id')
             ->orderBy('year_level')
             ->orderBy('code')
-            ->paginate(24);
+            ->paginate($this->tablePageSize($request))->withQueryString();
 
         return view('student.subjects', compact('subjects'));
+    }
+
+    private function tablePageSize(Request $request): int
+    {
+        return 20;
     }
 }

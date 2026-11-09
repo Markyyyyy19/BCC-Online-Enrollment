@@ -83,14 +83,14 @@
             @endif
             <div class="table-wrap">
                 <table class="responsive-table enrollment-subject-table" aria-labelledby="enrollment-subjects-title">
-                    <thead><tr><th scope="col">Code</th><th scope="col">Descriptive Title</th><th scope="col">Units</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+                    <thead><tr><th scope="col">Code</th><th scope="col">Descriptive Title</th><th scope="col" class="numeric-cell">Units</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
                     <tbody>
                         @forelse ($subjects as $subject)
                             @php($subjectIsSelected = in_array($subject->id, old('subject_ids', [])))
                             <tr>
                                 <td data-label="Code"><strong>{{ $subject->code }}</strong></td>
                                 <td data-label="Descriptive Title">{{ $subject->title }}</td>
-                                <td data-label="Units">{{ $subject->units }}</td>
+                                <td class="numeric-cell" data-label="Units">{{ $subject->units }}</td>
                                 <td data-label="Status"><span class="status-badge {{ $subjectIsSelected ? 'status-approved' : 'subject-available' }}" data-subject-status>{{ $subjectIsSelected ? 'Selected' : 'Available' }}</span></td>
                                 <td class="subject-action-cell" data-label="Action"><label class="subject-select-label"><input class="subject-select-checkbox" id="subject-{{ $subject->id }}" type="checkbox" name="subject_ids[]" value="{{ $subject->id }}" data-units="{{ $subject->units }}" aria-label="Select {{ $subject->code }}" @checked($subjectIsSelected)><span>Select</span></label><button class="button button-quiet button-small remove-subject" type="button" aria-label="Remove {{ $subject->code }}" hidden>Remove</button></td>
                             </tr>
